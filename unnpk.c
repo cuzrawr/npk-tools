@@ -33,10 +33,13 @@
 
 #include "npk.h"
 
-#define VERSION_STR	"1.1.1"
+#define VERSION_STR	"1.1.2a"
 
 #define FL_DUMP		0x01	/* Dump internal NPK structures flag */
 #define FL_LIST		0x02	/* List NPK files */
+
+/* dirty force flag */
+int fforce = 0;
 
 /* Operation options */
 struct options {
@@ -47,6 +50,7 @@ struct options {
 		OP_UNKNOWN = 0,
 		OP_HELP,
 		OP_LIST,
+		OP_FORCE,
 		OP_EXTRACT,
 	} op;			/* Selected operation */
 	unsigned verb;		/* Verbose level */
@@ -88,6 +92,7 @@ static const struct map_entry file_types_names[] = {
 	{ 0, "Unknown"},
 	{ NPK_FILE_TYPE_DEV, "device"},
 	{ NPK_FILE_TYPE_DIR, "directory"},
+	{ DPK_FILE_TYPE_DIR, "directory"},
 	{ NPK_FILE_TYPE_REGULAR, "regular"},
 	{ 0, NULL},
 };
@@ -343,7 +348,7 @@ static int proc_part_data_files(uint8_t *data, const uint32_t size, const struct
 			if (opt->flags & FL_DUMP) {
 				printf("Name    : %s\n", tmp);
 			} else if (opt->flags & FL_LIST) {
-				if (NPK_FILE_TYPE_DIR == hdr.type)
+				if (NPK_FILE_TYPE_DIR == hdr.type || DPK_FILE_TYPE_DIR == hdr.type)
 					printf("%s%s\n", tmp, tmp[hdr.name_len - 1] != '/' ? "/" : "");
 				else
 					printf("%s\n", tmp);
@@ -351,14 +356,18 @@ static int proc_part_data_files(uint8_t *data, const uint32_t size, const struct
 			if (opt->op == OP_EXTRACT) {
 				if (*(char *)p == '/')
 					++tmp;
-				if (NPK_FILE_TYPE_DIR == hdr.type) {
+				if (NPK_FILE_TYPE_DIR == hdr.type || DPK_FILE_TYPE_DIR == hdr.type) {
 					create_path(tmp);
 				} else {
 					create_file_path(tmp);
 					file_out = fopen(tmp, "wb");
 					if (NULL == file_out) {
 						fprintf(stderr, "open %s: %s\n", tmp, strerror(errno));
-						return -1;
+						if (fforce == 1) {
+							return 0;
+						} else {
+							return -1;
+						}
 					}
 				}
 				if (*(char *)p == '/')
@@ -645,9 +654,13 @@ static int proc_main(uint8_t *base, const struct options *opt)
 		return -EINVAL;
 	}
 	mhdr = (struct npk_main_hdr *)ptr;
-	if (ntohl(mhdr->sign) != NPK_SIGNATURE) {
-		fprintf(stderr, "Error: Invalid file signature should be %08X.\n", NPK_SIGNATURE);
-		return -EINVAL;
+	if (ntohl(mhdr->sign) != NPK_SIGNATURE && ntohl(mhdr->sign) != DPK_SIGNATURE) {
+		// Error if not forced
+		if (fforce == 0) {
+			fprintf(stderr, "Invalid file signature should be %08X (NPK) or %08X (DPK).\n\n", NPK_SIGNATURE, DPK_SIGNATURE);
+			printf(" Try adding -w \n\n");
+			return -EINVAL;
+		}
 	}
 	if (mhdr->remain_sz > (opt->file_in_size - sizeof(mhdr->sign) - sizeof(mhdr->remain_sz)))
 		fprintf(stderr, "Warning: remain size header field great than actual file size. File corrupted?");
@@ -692,6 +705,7 @@ static void usage(const char *name)
 		"\n"
 		"Options:\n"
 		"  -t         List package content\n"
+		"  -w         Ignore signature check\n"
 		"  -x         Extract package content\n"
 		"  -f <file>  Specify input file name\n"
 		"  -C <dir>   Specify output directory for extraction (should exist)\n"
@@ -744,6 +758,10 @@ static int parse_args(const int argc, const char *argv[], struct options *opt)
 				state = ST_OPT_DIR;
 			} else if ('t' == argv[i][j]) {
 				opt->op = OP_LIST;
+			} else if ('w' == argv[i][j]) {
+				printf("WARN: Forcing extraction may cause errors!!! \n");
+				// dirty fixthis
+				fforce = 1;
 			} else if ('x' == argv[i][j]) {
 				opt->op = OP_EXTRACT;
 			} else if ('v' == argv[i][j]) {

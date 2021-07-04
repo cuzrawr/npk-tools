@@ -29,6 +29,12 @@
 /* NPK file signature */
 #define NPK_SIGNATURE	0x1EF1D0BA
 
+//
+// 00000000   FB 0F 10 A1 - below_6.47 *.dpk files have this signature somethimes
+#define DPK_SIGNATURE 0xFB0F10A1
+
+//
+
 /* Main NPK file header */
 struct npk_main_hdr {
 	uint32_t sign;				/* File magic signature */
@@ -73,6 +79,14 @@ struct npk_part_pkg_info_hdr {
 #define NPK_FILE_TYPE_DEV	33	/* Device node */
 #define NPK_FILE_TYPE_DIR	65	/* Directory */
 #define NPK_FILE_TYPE_REGULAR	129	/* Regular file */
+
+
+/* DPK patch.
+  WARN NOT PROPERLY TESTED MAY CAUSE BUGS */
+#define DPK_FILE_TYPE_DIR       69      /* Directory */
+
+
+
 
 /* NPK file container item header */
 struct npk_part_file_item_hdr {
